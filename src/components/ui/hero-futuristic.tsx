@@ -6,6 +6,7 @@ import { useMemo, useRef, useState, useEffect } from 'react';
 import * as THREE from 'three/webgpu';
 import { bloom } from 'three/examples/jsm/tsl/display/BloomNode.js';
 import { ArrowDown } from 'lucide-react';
+import { ShinyButton } from "@/components/ui/shiny-button";
 
 import {
   abs,
@@ -52,7 +53,6 @@ const Scene = () => {
 
   const { material, uniforms } = useMemo(() => {
     const uPointer = uniform(new THREE.Vector2(0));
-    const uProgress = uniform(0);
 
     const strength = 0.01;
 
@@ -63,76 +63,31 @@ const Scene = () => {
       uv().add(tDepthMap.r.mul(uPointer).mul(strength))
     );
 
-    const aspect = float(WIDTH).div(HEIGHT);
-    const tUv = vec2(uv().x.mul(aspect), uv().y);
-
-    const tiling = vec2(120.0);
-    const tiledUv = mod(tUv.mul(tiling), 2.0).sub(1.0);
-
-    const brightness = mx_cell_noise_float(tUv.mul(tiling).div(2));
-
-    const dist = float(tiledUv.length());
-    const dots = float(smoothstep(0.5, 0.49, dist)).mul(brightness);
-
-    const depth = tDepthMap;
-
-    // Fix: Clamp uProgress or depth comparison to avoid negative artifacts or glitches
-    // during the animation loop wrapping
-    const flow = oneMinus(smoothstep(0, 0.02, abs(depth.sub(uProgress))));
-
     // Use the original texture colors
     const finalColor = tMap;
 
-    // Force the dots to be 100% Blue
-    // Using clamp to ensure no overflow
-    // Fix: Mask dots by depth to prevent background flashing when uProgress is near 0
-    const hasDepth = smoothstep(0.0, 0.01, tDepthMap.r);
-    const dotIntensity = dots.mul(flow).mul(hasDepth).clamp(0.0, 1.0);
-    const dotColor = vec3(0.0, 0.0, 10.0); // Pure Blue, High Intensity for Bloom
-    
-    // Create the final color using MIX
-    // This guarantees we transition to pure blue where the dots are
-    const colorWithDots = mix(finalColor, dotColor, dotIntensity);
-
-    // Calculate Alpha
-    // 1. Object Opacity: Based on Depth Map
-    const objectAlpha = smoothstep(0.05, 0.1, tDepthMap.r);
-    
-    // 2. Dot Opacity: Where dots are, we want opacity too
-    // Fix: Ensure dotIntensity is clamped and valid to prevent black flashes
-    const dotAlpha = smoothstep(0.01, 0.1, dotIntensity);
-
-    // 3. Final Alpha: Union of Object and Dots
-    const finalAlpha = max(objectAlpha, dotAlpha);
-
-    // If we are in a "Dot Only" area (Background), we need to ensure the color is Blue
-    // The 'colorWithDots' might be Black + Blue = Blue, which is correct.
-    // But 'finalColor' (tMap) is Black in the background.
-    // So colorWithDots = Black + Blue = Blue. Correct.
+    // Use depth map to remove background
+    const depthValue = tDepthMap.r;
+    const finalAlpha = smoothstep(0.08, 0.15, depthValue);
 
     const material = new THREE.MeshBasicNodeMaterial({
-      colorNode: colorWithDots,
+      colorNode: finalColor,
       opacityNode: finalAlpha,
       transparent: true,
       opacity: 1, 
-      depthWrite: false, // Prevent z-fighting or depth sorting issues during transparency
-      blending: THREE.NormalBlending, // Enforce standard blending to prevent additive overflow
+      depthWrite: false,
+      blending: THREE.NormalBlending,
     });
 
     return {
       material,
       uniforms: {
         uPointer,
-        uProgress,
       },
     };
   }, [rawMap, depthMap]);
 
   const [w, h] = useAspect(WIDTH, HEIGHT);
-
-  useFrame(({ clock }) => {
-    uniforms.uProgress.value = (Math.sin(clock.getElapsedTime() * 0.5) * 0.5 + 0.5);
-  });
 
   useFrame(({ pointer }) => {
     uniforms.uPointer.value = pointer;
@@ -157,59 +112,172 @@ const Scene = () => {
   );
 };
 
+// ChatGPT/OpenAI Logo SVG Component - Stylized knot/flower pattern
+const AILogo = () => (
+  <svg
+    width="22"
+    height="22"
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className="inline-block mx-1.5 align-middle"
+    style={{ verticalAlign: 'middle' }}
+  >
+    {/* OpenAI/ChatGPT logo - stylized multi-layered knot pattern */}
+    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5" fill="none" />
+    <path
+      d="M8 8c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2zm8 0c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2zm-4 8c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2z"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      fill="none"
+    />
+    <path
+      d="M12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8z"
+      stroke="currentColor"
+      strokeWidth="1"
+      fill="none"
+      opacity="0.5"
+    />
+    <path
+      d="M12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6z"
+      stroke="currentColor"
+      strokeWidth="1"
+      fill="none"
+      opacity="0.3"
+    />
+  </svg>
+);
+
+// Rotating AI Name Carousel Component
+const RotatingAIName = () => {
+  const aiNames = [
+    { display: 'ChatGPT', value: 'ChatGPT' },
+    { display: 'Claude', value: 'Claude' },
+    { display: 'Perplexity', value: 'Perplexity' },
+    { display: 'Gemini', value: 'Gemini' }
+  ];
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIsTransitioning(true);
+      setTimeout(() => {
+        setCurrentIndex((prev) => (prev + 1) % aiNames.length);
+        setIsTransitioning(false);
+      }, 300); // Transition duration
+    }, 2000); // Change every 2 seconds
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const nextIndex = (currentIndex + 1) % aiNames.length;
+
+  return (
+    <span 
+      className="block min-w-[140px] text-left overflow-hidden relative"
+      style={{ 
+        height: '1.2em', 
+        lineHeight: '1.2em'
+      }}
+    >
+      {/* Current item sliding up and out */}
+      <span
+        key={`current-${currentIndex}`}
+        className="absolute top-0 left-0 right-0"
+        style={{
+          fontFamily: 'Georgia, "Times New Roman", serif',
+          fontStyle: 'italic',
+          transform: isTransitioning ? 'translateY(-100%)' : 'translateY(0)',
+          transition: 'transform 300ms ease-in-out',
+          willChange: 'transform',
+        }}
+      >
+        {aiNames[currentIndex].display}
+      </span>
+      {/* Next item sliding up from below */}
+      <span
+        key={`next-${nextIndex}`}
+        className="absolute top-0 left-0 right-0"
+        style={{
+          fontFamily: 'Georgia, "Times New Roman", serif',
+          fontStyle: 'italic',
+          transform: isTransitioning ? 'translateY(0)' : 'translateY(100%)',
+          transition: 'transform 300ms ease-in-out',
+          willChange: 'transform',
+        }}
+      >
+        {aiNames[nextIndex].display}
+      </span>
+    </span>
+  );
+};
+
 const HeroFuturistic = () => {
-  const titleWords = 'The Antifragile Way'.split(' ');
   const subtitle = 'Generative Engine Optimization to grow systems that scale with you.';
-  const [visibleWords, setVisibleWords] = useState(0);
+  const [titleVisible, setTitleVisible] = useState(false);
   const [subtitleVisible, setSubtitleVisible] = useState(false);
-  const [delays, setDelays] = useState<number[]>([]);
   const [subtitleDelay, setSubtitleDelay] = useState(0);
 
   useEffect(() => {
-    // Client-side only: generate random delays for glitch effect
-    setDelays(titleWords.map(() => Math.random() * 0.07));
+    // Client-side only: generate random delay for subtitle
     setSubtitleDelay(Math.random() * 0.1);
-  }, [titleWords.length]);
+  }, []);
 
   useEffect(() => {
-    if (visibleWords < titleWords.length) {
-      const timeout = setTimeout(() => setVisibleWords(visibleWords + 1), 600);
-      return () => clearTimeout(timeout);
-    } else {
+    const timeout = setTimeout(() => setTitleVisible(true), 300);
+    return () => clearTimeout(timeout);
+  }, []);
+
+  useEffect(() => {
+    if (titleVisible) {
       const timeout = setTimeout(() => setSubtitleVisible(true), 800);
       return () => clearTimeout(timeout);
     }
-  }, [visibleWords, titleWords.length]);
+  }, [titleVisible]);
 
   return (
-    <div className="h-svh grid grid-cols-1 md:grid-cols-2 w-full overflow-hidden bg-white">
+    <div className="w-full h-full grid grid-cols-1 md:grid-cols-2 overflow-hidden">
       {/* Text Column - Left (Top on Mobile) */}
-      <div className="flex flex-col justify-center px-6 md:px-20 relative z-10 h-[40vh] md:h-full">
-        <div className="uppercase">
-          <div className="text-3xl md:text-5xl xl:text-6xl 2xl:text-7xl font-extrabold text-left max-w-2xl tracking-tighter leading-tight">
-            <div className="flex flex-wrap gap-x-3 lg:gap-x-4 text-black">
-              {titleWords.map((word, index) => (
-                <div
-                  key={index}
-                  className={`transition-opacity duration-700 ${index < visibleWords ? 'opacity-100' : 'opacity-0'} ${word.toUpperCase().includes('ANTIFRAGILE') ? 'text-[#1D40B0]' : ''}`}
-                  style={{ 
-                    transitionDelay: `${index * 0.13 + (delays[index] || 0)}s` 
-                  }}
-                >
-                  {word}
-                </div>
-              ))}
+      <div className="flex flex-col justify-center px-6 md:px-20 relative z-10 h-full">
+        <div className="text-left max-w-2xl">
+          <div className="text-3xl md:text-5xl xl:text-6xl 2xl:text-7xl font-extrabold text-black tracking-tight leading-tight">
+            <div
+              className={`transition-opacity duration-700 ${titleVisible ? 'opacity-100' : 'opacity-0'}`}
+              style={{ fontFamily: 'sans-serif' }}
+            >
+              <div 
+                className="text-xs md:text-sm xl:text-base 2xl:text-lg font-normal mb-4 md:mb-6 uppercase tracking-[0.2em]"
+                style={{ 
+                  color: '#1d40b0',
+                  letterSpacing: '0.2em'
+                }}
+              >
+                The Antifragile Way
+              </div>
+              <div className="font-normal">Get seen on</div>
+              <div>
+                <RotatingAIName />
+              </div>
             </div>
           </div>
-          <div className="text-xs md:text-xl xl:text-2xl 2xl:text-3xl mt-6 overflow-hidden text-black font-semibold tracking-tight">
+          <div className="text-xs md:text-xl xl:text-2xl 2xl:text-3xl mt-6 overflow-hidden text-black font-normal tracking-tight">
             <div
               className={`transition-opacity duration-700 ${subtitleVisible ? 'opacity-100' : 'opacity-0'}`}
               style={{ 
-                transitionDelay: `${titleWords.length * 0.13 + 0.2 + subtitleDelay}s` 
+                transitionDelay: `${0.2 + subtitleDelay}s` 
               }}
             >
               {subtitle}
             </div>
+          </div>
+          <div className="flex items-center gap-3 mt-8 md:mt-10">
+            <ShinyButton className="!px-5 !py-2.5 md:!px-6 md:!py-3 !text-sm md:!text-base">
+              Start free trial
+            </ShinyButton>
+            <button className="text-black px-5 py-2.5 md:px-6 md:py-3 rounded-full font-medium text-sm md:text-base hover:bg-gray-100 transition-colors duration-200">
+              Log in
+            </button>
           </div>
         </div>
       </div>
